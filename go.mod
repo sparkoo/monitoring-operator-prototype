@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/go-openapi/spec v0.19.0
+	github.com/operator-framework/operator-lifecycle-manager v0.0.0-20190605231540-b8a4faf68e36
 	github.com/operator-framework/operator-sdk v0.12.0
 	github.com/spf13/pflag v1.0.3
 	k8s.io/api v0.0.0

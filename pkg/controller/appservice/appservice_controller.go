@@ -2,7 +2,9 @@ package appservice
 
 import (
 	"context"
+	"fmt"
 
+	v1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1"
 	appv1alpha1 "github.com/sparkoo/app-operator/pkg/apis/app/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -124,9 +126,40 @@ func (r *ReconcileAppService) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	if err := ensureOperatorGroup(r, instance); err != nil {
+		return reconcile.Result{}, err
+	}
+	installPrometheus(r)
+
 	// Pod already exists - don't requeue
 	reqLogger.Info("Skip reconcile: Pod already exists", "Pod.Namespace", found.Namespace, "Pod.Name", found.Name)
 	return reconcile.Result{}, nil
+}
+
+func ensureOperatorGroup(service *ReconcileAppService, appService *appv1alpha1.AppService) error {
+	foundGroup := &v1.OperatorGroup{}
+	if findErr := service.client.Get(context.TODO(), types.NamespacedName{Name: appService.Name + "-og", Namespace: appService.Namespace}, foundGroup); findErr != nil && errors.IsNotFound(findErr) {
+		newOperatorGroup := &v1.OperatorGroup{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      appService.Name + "-og",
+				Namespace: appService.Namespace,
+			},
+		}
+		if createErr := service.client.Create(context.TODO(), newOperatorGroup); createErr != nil {
+			return fmt.Errorf("Failed to create OperatorGroup")
+		}
+	} else {
+		log.Info("OperatorGroup found, don't need to create it")
+	}
+	return nil
+}
+
+func installPrometheus(service *ReconcileAppService) {
+	installOperator("prometheus-operator")
+}
+
+func installOperator(name string) {
+
 }
 
 // newPodForCR returns a busybox pod with the same name/namespace as the cr
