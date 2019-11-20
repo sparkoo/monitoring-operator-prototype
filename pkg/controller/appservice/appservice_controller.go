@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	v1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
-
 	operatorsv1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1"
 	appv1alpha1 "github.com/sparkoo/app-operator/pkg/apis/app/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -12,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -127,6 +127,10 @@ func (r *ReconcileAppService) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	if err := deployService(r, instance); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	if err := ensureOperatorGroup(r, instance); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -143,12 +147,44 @@ func (r *ReconcileAppService) Reconcile(request reconcile.Request) (reconcile.Re
 	return reconcile.Result{}, nil
 }
 
-func setupPrometheus(r *ReconcileAppService, service *appv1alpha1.AppService) error {
+func deployService(r *ReconcileAppService, app *appv1alpha1.AppService) error {
+	serviceName := app.Name + "-appservice"
+	findErr := r.client.Get(context.TODO(), types.NamespacedName{Name: serviceName, Namespace: app.Namespace}, &corev1.Service{})
+	if findErr == nil {
+		log.Info("Service found. Nothing to do.")
+	} else if errors.IsNotFound(findErr) {
+		log.Info("Create service")
+		appService := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      serviceName,
+				Namespace: app.Namespace,
+				Labels:    map[string]string{"app": app.Name},
+			},
+			Spec: corev1.ServiceSpec{
+				Ports: []corev1.ServicePort{
+					{
+						Port:       app.Spec.Port,
+						TargetPort: intstr.IntOrString{IntVal: app.Spec.Port, Type: intstr.Int},
+						Name:       "data-port",
+					},
+				},
+				Selector: map[string]string{"app": app.Name},
+			},
+		}
+		return r.client.Create(context.TODO(), appService)
+	} else {
+		return findErr
+	}
+
+	return nil
+}
+
+func setupPrometheus(r *ReconcileAppService, app *appv1alpha1.AppService) error {
 	log.Info("Create ServiceMonitor object")
 
-	serviceMonitorName := service.Name + "-servicemonitor"
+	serviceMonitorName := app.Name + "-servicemonitor"
 	foundServiceMonitor := &v1.ServiceMonitor{}
-	findErr := r.client.Get(context.TODO(), types.NamespacedName{Name: serviceMonitorName, Namespace: service.Namespace}, foundServiceMonitor)
+	findErr := r.client.Get(context.TODO(), types.NamespacedName{Name: serviceMonitorName, Namespace: app.Namespace}, foundServiceMonitor)
 	if findErr == nil {
 		log.Info(fmt.Sprintf("ServiceMonitor [%s] found, nothing to do", serviceMonitorName))
 	} else if errors.IsNotFound(findErr) {
@@ -156,17 +192,17 @@ func setupPrometheus(r *ReconcileAppService, service *appv1alpha1.AppService) er
 		newServiceMonitor := &v1.ServiceMonitor{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      serviceMonitorName,
-				Namespace: service.Namespace,
+				Namespace: app.Namespace,
 			},
 			Spec: v1.ServiceMonitorSpec{
 				Endpoints: []v1.Endpoint{
-					{Port: "8887", Interval: "1s"},
+					{Port: "data-port", Interval: "1s"},
 				},
 				Selector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"app": "che"},
+					MatchLabels: map[string]string{"app": app.Name},
 				},
 				NamespaceSelector: v1.NamespaceSelector{
-					MatchNames: []string{"che"},
+					MatchNames: []string{app.Namespace},
 				},
 			},
 		}
@@ -180,25 +216,25 @@ func setupPrometheus(r *ReconcileAppService, service *appv1alpha1.AppService) er
 	return nil
 }
 
-func ensureOperatorGroup(service *ReconcileAppService, appService *appv1alpha1.AppService) error {
+func ensureOperatorGroup(r *ReconcileAppService, app *appv1alpha1.AppService) error {
 	log.Info("Ensure to have OperatorGroup")
 
 	foundGroup := &operatorsv1.OperatorGroup{}
-	findErr := service.client.Get(context.TODO(), types.NamespacedName{Name: appService.Name + "-og", Namespace: appService.Namespace}, foundGroup)
+	findErr := r.client.Get(context.TODO(), types.NamespacedName{Name: app.Name + "-og", Namespace: app.Namespace}, foundGroup)
 	if findErr == nil {
 		log.Info("OperatorGroup found, don't need to create it")
 	} else if errors.IsNotFound(findErr) {
 		newOperatorGroup := &operatorsv1.OperatorGroup{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      appService.Name + "-og",
-				Namespace: appService.Namespace,
+				Name:      app.Name + "-og",
+				Namespace: app.Namespace,
 			},
-			Spec: operatorsv1.OperatorGroupSpec{TargetNamespaces: []string{appService.Namespace}},
+			Spec: operatorsv1.OperatorGroupSpec{TargetNamespaces: []string{app.Namespace}},
 		}
-		if createErr := service.client.Create(context.TODO(), newOperatorGroup); createErr != nil {
+		if createErr := r.client.Create(context.TODO(), newOperatorGroup); createErr != nil {
 			return fmt.Errorf("failed to create OperatorGroup")
 		}
-		if err := controllerutil.SetControllerReference(appService, newOperatorGroup, service.scheme); err != nil {
+		if err := controllerutil.SetControllerReference(app, newOperatorGroup, r.scheme); err != nil {
 			return err
 		}
 		log.Info("OperatorGroup created")
@@ -209,13 +245,13 @@ func ensureOperatorGroup(service *ReconcileAppService, appService *appv1alpha1.A
 	return nil
 }
 
-func installPrometheus(service *ReconcileAppService, appService *appv1alpha1.AppService) error {
+func installPrometheus(r *ReconcileAppService, app *appv1alpha1.AppService) error {
 	installOperator("prometheus-operator")
 	//subscription := &operators.Subscription{}
-	//if err := service.client.Create(context.TODO(), subscription); err != nil {
+	//if err := r.client.Create(context.TODO(), subscription); err != nil {
 	//	return err
 	//}
-	//findErr := service.client.Get(context.TODO(), types.NamespacedName{Name: appService.Name + "-promSubs", Namespace: appService.Namespace}, foundPromOp)
+	//findErr := r.client.Get(context.TODO(), types.NamespacedName{Name: app.Name + "-promSubs", Namespace: app.Namespace}, foundPromOp)
 	//if findErr == nil {
 	//	log.Info("Prometheus Operator Subscription found, nothing to do")
 	//} else if errors.IsNotFound(findErr) {
@@ -225,6 +261,28 @@ func installPrometheus(service *ReconcileAppService, appService *appv1alpha1.App
 	//	log.Error(findErr, "")
 	//	return findErr
 	//}
+
+	foundPrometheus := &v1.Prometheus{}
+	findErr := r.client.Get(context.TODO(), types.NamespacedName{Name: app.Name, Namespace: app.Namespace}, foundPrometheus)
+	if findErr == nil {
+		log.Info("Prometheus instance already exists")
+	} else if errors.IsNotFound(findErr) {
+		log.Info("Need to create new Prometheus instance")
+		prom := &v1.Prometheus{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      app.Name,
+				Namespace: app.Namespace,
+			},
+			Spec: v1.PrometheusSpec{
+				ServiceMonitorSelector: &metav1.LabelSelector{},
+				ServiceMonitorNamespaceSelector: &metav1.LabelSelector{},
+				ServiceAccountName:              "prometheus-k8s",
+			},
+		}
+		return r.client.Create(context.TODO(), prom)
+	} else {
+		return findErr
+	}
 
 	return nil
 }
@@ -248,9 +306,8 @@ func newPodForCR(cr *appv1alpha1.AppService) *corev1.Pod {
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					Name:    "busybox",
-					Image:   "busybox",
-					Command: []string{"sleep", "3600"},
+					Name:  "app",
+					Image: cr.Spec.Image,
 				},
 			},
 		},

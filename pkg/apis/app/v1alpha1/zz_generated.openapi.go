@@ -67,6 +67,21 @@ func schema_pkg_apis_app_v1alpha1_AppServiceSpec(ref common.ReferenceCallback) c
 			SchemaProps: spec.SchemaProps{
 				Description: "AppServiceSpec defines the desired state of AppService",
 				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"image": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"port": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int32",
+						},
+					},
+				},
+				Required: []string{"image", "port"},
 			},
 		},
 	}
@@ -78,15 +93,6 @@ func schema_pkg_apis_app_v1alpha1_AppServiceStatus(ref common.ReferenceCallback)
 			SchemaProps: spec.SchemaProps{
 				Description: "AppServiceStatus defines the observed state of AppService",
 				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"size": {
-						SchemaProps: spec.SchemaProps{
-							Description: "INSERT ADDITIONAL STATUS FIELD - define observed state of cluster Important: Run \"operator-sdk generate k8s\" to regenerate code after modifying this file Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-				},
 			},
 		},
 	}
