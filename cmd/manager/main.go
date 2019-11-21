@@ -11,9 +11,9 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 
-	"github.com/sparkoo/app-operator/pkg/apis"
-	"github.com/sparkoo/app-operator/pkg/controller"
-	"github.com/sparkoo/app-operator/version"
+	"github.com/sparkoo/monitoring-operator-prototype/pkg/apis"
+	"github.com/sparkoo/monitoring-operator-prototype/pkg/controller"
+	"github.com/sparkoo/monitoring-operator-prototype/version"
 
 	olm "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators"
 	olmv1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1"
@@ -88,7 +88,7 @@ func main() {
 
 	ctx := context.TODO()
 	// Become the leader before proceeding
-	err = leader.Become(ctx, "app-operator-lock")
+	err = leader.Become(ctx, "monitoring-operator-prototype-lock")
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)

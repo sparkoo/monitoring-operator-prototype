@@ -1,4 +1,4 @@
-module github.com/sparkoo/app-operator
+module github.com/sparkoo/monitoring-operator-prototype
 
 go 1.13
 

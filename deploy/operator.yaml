@@ -1,24 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: app-operator
+  name: monitoring-operator-prototype
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: app-operator
+      name: monitoring-operator-prototype
   template:
     metadata:
       labels:
-        name: app-operator
+        name: monitoring-operator-prototype
     spec:
-      serviceAccountName: app-operator
+      serviceAccountName: monitoring-operator-prototype
       containers:
-        - name: app-operator
+        - name: monitoring-operator-prototype
           # Replace this with the built image name
-          image: quay.io/mvala/app-operator
+          image: quay.io/mvala/monitoring-operator-prototype
           command:
-          - app-operator
+          - monitoring-operator-prototype
           imagePullPolicy: Always
           env:
             - name: WATCH_NAMESPACE
@@ -30,4 +30,4 @@ spec:
                 fieldRef:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
-              value: "app-operator"
+              value: "monitoring-operator-prototype"

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	v1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	operatorsv1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1"
-	appv1alpha1 "github.com/sparkoo/app-operator/pkg/apis/app/v1alpha1"
+	appv1alpha1 "github.com/sparkoo/monitoring-operator-prototype/pkg/apis/app/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

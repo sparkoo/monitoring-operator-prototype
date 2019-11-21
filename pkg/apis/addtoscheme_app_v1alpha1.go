@@ -1,7 +1,7 @@
 package apis
 
 import (
-	"github.com/sparkoo/app-operator/pkg/apis/app/v1alpha1"
+	"github.com/sparkoo/monitoring-operator-prototype/pkg/apis/app/v1alpha1"
 )
 
 func init() {

@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"github.com/sparkoo/app-operator/pkg/controller/appservice"
+	"github.com/sparkoo/monitoring-operator-prototype/pkg/controller/appservice"
 )
 
 func init() {
