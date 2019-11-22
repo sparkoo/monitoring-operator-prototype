@@ -4,14 +4,15 @@ import (
 	"context"
 	"fmt"
 	v1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
-	operatorsv1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1"
 	appv1alpha1 "github.com/sparkoo/monitoring-operator-prototype/pkg/apis/app/v1alpha1"
+	"io/ioutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -131,9 +132,6 @@ func (r *ReconcileAppService) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	if err := ensureOperatorGroup(r, instance); err != nil {
-		return reconcile.Result{}, err
-	}
 	if err := installPrometheus(r, instance); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -216,51 +214,10 @@ func setupPrometheus(r *ReconcileAppService, app *appv1alpha1.AppService) error 
 	return nil
 }
 
-func ensureOperatorGroup(r *ReconcileAppService, app *appv1alpha1.AppService) error {
-	log.Info("Ensure to have OperatorGroup")
-
-	foundGroup := &operatorsv1.OperatorGroup{}
-	findErr := r.client.Get(context.TODO(), types.NamespacedName{Name: app.Name + "-og", Namespace: app.Namespace}, foundGroup)
-	if findErr == nil {
-		log.Info("OperatorGroup found, don't need to create it")
-	} else if errors.IsNotFound(findErr) {
-		newOperatorGroup := &operatorsv1.OperatorGroup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      app.Name + "-og",
-				Namespace: app.Namespace,
-			},
-			Spec: operatorsv1.OperatorGroupSpec{TargetNamespaces: []string{app.Namespace}},
-		}
-		if createErr := r.client.Create(context.TODO(), newOperatorGroup); createErr != nil {
-			return fmt.Errorf("failed to create OperatorGroup")
-		}
-		if err := controllerutil.SetControllerReference(app, newOperatorGroup, r.scheme); err != nil {
-			return err
-		}
-		log.Info("OperatorGroup created")
-	} else {
-		log.Error(findErr, "")
-		return findErr
-	}
-	return nil
-}
-
 func installPrometheus(r *ReconcileAppService, app *appv1alpha1.AppService) error {
-	installOperator("prometheus-operator")
-	//subscription := &operators.Subscription{}
-	//if err := r.client.Create(context.TODO(), subscription); err != nil {
-	//	return err
-	//}
-	//findErr := r.client.Get(context.TODO(), types.NamespacedName{Name: app.Name + "-promSubs", Namespace: app.Namespace}, foundPromOp)
-	//if findErr == nil {
-	//	log.Info("Prometheus Operator Subscription found, nothing to do")
-	//} else if errors.IsNotFound(findErr) {
-	//	log.Info("Create Operator Subscription here !!!")
-	//} else {
-	//	log.Info("eeer")
-	//	log.Error(findErr, "")
-	//	return findErr
-	//}
+	if err := installPrometheusOperator(r, app); err != nil {
+		return err
+	}
 
 	foundPrometheus := &v1.Prometheus{}
 	findErr := r.client.Get(context.TODO(), types.NamespacedName{Name: app.Name, Namespace: app.Namespace}, foundPrometheus)
@@ -285,6 +242,24 @@ func installPrometheus(r *ReconcileAppService, app *appv1alpha1.AppService) erro
 	}
 
 	return nil
+}
+
+func installPrometheusOperator(r *ReconcileAppService, app *appv1alpha1.AppService) error {
+	decode := scheme.Codecs.UniversalDeserializer().Decode
+	yaml, err := ioutil.ReadFile("deploy/prometheus/prometheus-operator-service-account.yaml")
+	if err != nil {
+		return err
+	}
+	sa := &corev1.ServiceAccount{}
+	obj, kind, err := decode(yaml, nil, sa)
+	log.Info("", "obj", obj)
+	log.Info("", "sa", sa)
+	log.Info("", "kind", kind)
+	log.Info("", "err", err)
+
+	sa.Namespace = app.Namespace
+
+	return r.client.Create(context.TODO(), sa)
 }
 
 func installOperator(name string) {
